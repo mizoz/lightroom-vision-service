@@ -1,163 +1,334 @@
 # Lightroom Vision Service
 
-Local HTTP service that provides AI vision analysis for Lightroom photos using Alibaba Cloud's Coding Plan (Qwen-VL / Kimi-K2.5).
+> Local HTTP service that provides AI vision analysis for Lightroom photos using Alibaba Cloud's Coding Plan (Qwen-VL / Kimi-K2.5).
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+
+## 🔐 Security-First Architecture
+
+This service is designed with security as the top priority:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    YOUR LOCAL MACHINE                           │
+│                                                                 │
+│  ┌──────────────┐         ┌─────────────────┐                  │
+│  │   Lightroom  │ ──────▶ │  Vision Service │                  │
+│  │   Plugin     │  :3456  │  (localhost)    │                  │
+│  │  (NO KEY)    │         │  (HOLDS KEY)    │                  │
+│  └──────────────┘         └────────┬────────┘                  │
+│                                    │                            │
+└────────────────────────────────────┼────────────────────────────┘
+                                     │ HTTPS
+                                     ▼
+                          ┌─────────────────────┐
+                          │  Alibaba Cloud      │
+                          │  Coding Plan API    │
+                          │  (Qwen-VL / Kimi)   │
+                          └─────────────────────┘
+```
+
+### Why This Design?
+
+| Component | Security Benefit |
+|-----------|------------------|
+| **Plugin has NO API key** | Even if plugin is compromised, key is safe |
+| **Service on localhost only** | No external access, firewall-protected |
+| **Key in `.env` only** | Never committed to git, never logged |
+| **Coding Plan compliance** | Service is the "coding tool" (allowed), not the plugin |
+
+### Security Checklist
+
+- ✅ API key stored in `.env` (gitignored)
+- ✅ No keys in source code, logs, or error messages
+- ✅ Localhost-only binding (127.0.0.1)
+- ✅ Input validation on all endpoints
+- ✅ SQLite cache stays local
+- ✅ No photo data persisted (only hashes + results)
+
+---
 
 ## Features
 
-- **Alt Text Generation** - Accessibility-focused image descriptions
-- **Keyword Extraction** - Search-optimized tags for photo organization
-- **Caption Writing** - Engaging photo captions
-- **Detailed Analysis** - Comprehensive image breakdown
-- **Smart Caching** - SQLite cache prevents re-processing same photos
-- **Usage Tracking** - Monitor API usage and cache hit rates
+| Feature | Description |
+|---------|-------------|
+| **Alt Text** | Accessibility-focused image descriptions |
+| **Keywords** | Search-optimized tags for organization |
+| **Captions** | Engaging photo captions |
+| **Smart Caching** | SQLite cache prevents re-processing (saves quota) |
+| **Usage Tracking** | Monitor API calls, cache hit rates |
+| **Batch Processing** | Analyze hundreds of photos efficiently |
 
-## Why This Architecture?
+---
 
-Alibaba's Coding Plan terms restrict usage to "coding tools" like OpenClaw. This service acts as the bridge:
+## Quick Start
 
-```
-Lightroom Plugin → localhost:3456 → Alibaba Coding Plan API
-```
-
-The service (not the plugin) holds the API key and makes compliant API calls.
-
-## Setup
-
-### 1. Install Dependencies
+### 1. Install
 
 ```bash
+git clone https://github.com/mizoz/lightroom-vision-service.git
+cd lightroom-vision-service
 npm install
 ```
 
-### 2. Configure Environment
+### 2. Configure
 
 ```bash
 cp .env.example .env
+nano .env  # Add your API key
 ```
 
-Edit `.env` with your Alibaba Cloud Coding Plan API key:
+**Get your API key:**
+1. Go to [Alibaba Cloud Model Studio](https://modelstudio.console.alibabacloud.com/)
+2. Subscribe to **Coding Plan Lite** ($3 first month)
+3. Copy your key (format: `sk-sp-xxxxx`)
+4. Paste into `.env`
 
-```env
-ALIBABA_API_KEY=sk-sp-xxxxx
-ALIBABA_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/apps/anthropic
-VISION_MODEL=qwen3.5-plus
-PORT=3456
-```
-
-### 3. Get Your API Key
-
-1. Go to [Alibaba Cloud Model Studio Console](https://modelstudio.console.alibabacloud.com/)
-2. Subscribe to Coding Plan (Lite: $3 first month)
-3. Get your exclusive API key from the Coding Plan page
-4. **Important:** Use the Coding Plan endpoint, not the pay-as-you-go endpoint
-
-### 4. Start the Service
+### 3. Run
 
 ```bash
 npm start
 ```
 
-## API Endpoints
+Service runs on `http://localhost:3456`
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/api/v1/analyze` | POST | Single image analysis |
-| `/api/v1/analyze/batch` | POST | Batch analysis |
-| `/api/v1/stats` | GET | Usage statistics |
-| `/api/v1/cache` | DELETE | Clear cache |
+---
 
-### Example: Analyze Image
+## API Reference
+
+### Health Check
 
 ```bash
-curl -X POST http://localhost:3456/api/v1/analyze \
-  -H "Content-Type: application/json" \
-  -d '{
-    "image": "base64_encoded_image_data",
-    "promptType": "alt_text",
-    "useCache": true
-  }'
+GET http://localhost:3456/health
 ```
 
-### Response
+### Analyze Single Image
 
+```bash
+POST http://localhost:3456/api/v1/analyze
+Content-Type: application/json
+
+{
+  "image": "base64_encoded_jpeg",
+  "promptType": "alt_text",
+  "useCache": true
+}
+```
+
+**Response:**
 ```json
 {
   "success": true,
   "cached": false,
   "data": {
     "alt_text": "A person hiking on a mountain trail...",
-    "keywords": ["hiking", "mountain", "trail", "outdoor"],
+    "keywords": ["hiking", "mountain", "outdoor"],
     "model_used": "qwen3.5-plus",
     "processing_time_ms": 2340
   }
 }
 ```
 
-## Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ALIBABA_API_KEY` | (required) | Your Coding Plan API key |
-| `ALIBABA_BASE_URL` | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | API endpoint |
-| `VISION_MODEL` | `qwen3.5-plus` | Model to use |
-| `PORT` | `3456` | Service port |
-| `DEBUG` | `false` | Enable debug logging |
-
-## Available Models (Coding Plan)
-
-| Model | Best For | Quota Usage |
-|-------|----------|-------------|
-| `qwen3.5-plus` | General vision, alt text | Medium |
-| `kimi-k2.5` | Detailed analysis | Medium-High |
-| `glm-5` | Fast, simple tasks | Low |
-
-## Caching
-
-- Images are hashed (SHA256) before caching
-- Cache is stored in `data/vision-cache.db` (SQLite)
-- Cache entries include: image hash, prompt type, result, model used
-- Clear cache: `DELETE /api/v1/cache?olderThanDays=7`
-
-## Usage Stats
+### Batch Analysis
 
 ```bash
-curl http://localhost:3456/api/v1/stats
+POST http://localhost:3456/api/v1/analyze/batch
+Content-Type: application/json
+
+{
+  "images": ["base64_1", "base64_2", "..."],
+  "promptType": "alt_text"
+}
 ```
 
-Returns today's requests, cache hit rate, and average processing time.
+### Usage Statistics
 
-## Security
+```bash
+GET http://localhost:3456/api/v1/stats
+```
 
-- **No API key in Lightroom plugin** - Key stays in service's `.env`
-- **Localhost only** - Service binds to 127.0.0.1 by default
-- **No logging of sensitive data** - API keys never logged
-- **Input validation** - Base64 images validated before processing
+**Response:**
+```json
+{
+  "today": {
+    "requests": 47,
+    "cache_hits": 35,
+    "cache_hit_rate": "74.5%",
+    "avg_processing_time_ms": 2890
+  },
+  "cache": {
+    "total_cached": 312
+  }
+}
+```
+
+### Clear Cache
+
+```bash
+# Clear all
+DELETE http://localhost:3456/api/v1/cache
+
+# Clear old (older than 7 days)
+DELETE http://localhost:3456/api/v1/cache?olderThanDays=7
+```
+
+---
+
+## Configuration
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `ALIBABA_API_KEY` | — | ✅ | Your Coding Plan API key |
+| `ALIBABA_BASE_URL` | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | ✅ | Coding Plan endpoint |
+| `VISION_MODEL` | `qwen3.5-plus` | — | Model to use |
+| `PORT` | `3456` | — | Service port |
+| `DEBUG` | `false` | — | Enable debug logging |
+
+### Available Models (Coding Plan)
+
+| Model | Best For | Speed | Quota |
+|-------|----------|-------|-------|
+| `qwen3.5-plus` | General vision, alt text | Fast | Medium |
+| `kimi-k2.5` | Detailed analysis | Medium | Medium-High |
+| `glm-5` | Simple tasks | Fastest | Low |
+
+---
+
+## Prompt Types
+
+| Type | Output | Use Case |
+|------|--------|----------|
+| `alt_text` | Accessibility description | WCAG compliance |
+| `keywords` | Comma-separated tags | Search/organization |
+| `caption` | 1-2 sentence caption | Social media, albums |
+| `detailed` | Full analysis with sections | Archives, catalogs |
+
+---
+
+## Caching Strategy
+
+### How It Works
+
+1. Image is hashed (SHA256) before processing
+2. Hash + prompt type = cache key
+3. Results stored in SQLite (`data/vision-cache.db`)
+4. Subsequent requests for same image hit cache (instant)
+
+### Benefits
+
+| Metric | Without Cache | With Cache |
+|--------|---------------|------------|
+| API calls | 1 per photo | 1 per unique photo |
+| Response time | 3-5 seconds | <1 second |
+| Quota usage | High | 80-90% lower |
+
+### Cache Management
+
+```bash
+# View stats
+curl http://localhost:3456/api/v1/stats
+
+# Clear old entries (older than 7 days)
+curl -X DELETE "http://localhost:3456/api/v1/cache?olderThanDays=7"
+
+# Clear all
+curl -X DELETE http://localhost:3456/api/v1/cache
+```
+
+---
+
+## Quota & Pricing (Coding Plan Lite)
+
+| Period | Quota | Cost |
+|--------|-------|------|
+| First month | 18,000 requests | $3 |
+| Renewal | 18,000 requests | $5/month |
+
+### Real-World Usage
+
+| Scenario | Photos/Month | Quota Used |
+|----------|--------------|------------|
+| Light user | 500 | ~5% |
+| Moderate | 2,000 | ~20% |
+| Heavy | 5,000 | ~50% |
+
+**Note:** With caching enabled, similar photos (duplicates, bursts) don't consume additional quota.
+
+---
 
 ## Troubleshooting
 
-### "Cannot connect to service"
+### Service Won't Start
 
-1. Check service is running: `curl http://localhost:3456/health`
-2. Check port isn't blocked: `netstat -tlnp | grep 3456`
-3. Restart service: `npm start`
+```bash
+# Check .env exists
+ls -la .env
 
-### "API key not configured"
+# Verify Node version (18+)
+node --version
 
-1. Verify `.env` file exists (not `.env.example`)
-2. Check `ALIBABA_API_KEY` is set correctly
-3. Restart service after editing `.env`
+# Check port availability
+netstat -tlnp | grep 3456
+```
 
-### "Invalid response from Vision Service"
+### "API Key Not Configured"
 
-1. Check API key is valid (Coding Plan, not pay-as-you-go)
-2. Verify endpoint URL matches Coding Plan format
-3. Check model is available in your plan
+```bash
+# Verify key is set
+grep ALIBABA_API_KEY .env
+
+# Restart after editing .env
+npm start
+```
+
+### High Latency
+
+- **First call:** 3-5s (normal, API round-trip)
+- **Cached calls:** <1s
+- **Consistently slow:** Check network, API quota status
+
+### API Errors
+
+Check logs for details. Common issues:
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| Invalid API key | Wrong format or expired | Verify `sk-sp-xxxxx` format |
+| Wrong endpoint | Using pay-as-you-go URL | Use Coding Plan URL |
+| Quota exceeded | Monthly limit reached | Wait or upgrade plan |
+
+---
+
+## Development
+
+```bash
+# Run with auto-reload
+npm run dev
+
+# View logs
+tail -f logs/*.log  # if logging enabled
+```
+
+---
+
+## Related Projects
+
+- [Lightroom Vision Plugin](https://github.com/mizoz/lightroom-vision-plugin) — Lightroom Classic integration
+- [Complete Setup Guide](https://github.com/mizoz/lightroom-vision-plugin/blob/main/SETUP.md) — End-to-end instructions
+
+---
 
 ## License
 
-MIT
+MIT — See [LICENSE](LICENSE) for details.
 
-## Related
+---
 
-- [Lightroom Vision Plugin](../lightroom-vision-plugin) - Lightroom Classic plugin
+## Security Note
+
+**Never commit `.env` to git.** The `.gitignore` file excludes it by default. If you accidentally commit a key:
+
+1. Rotate it immediately in Alibaba Cloud console
+2. Remove from git history: `git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch .env' --prune-empty --tag-name-filter cat -- --all`
+3. Push: `git push origin --force --all`

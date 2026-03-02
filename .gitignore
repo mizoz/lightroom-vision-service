@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Environment (NEVER commit .env with real keys!)
+.env
+
+# Database
+data/*.db
+data/*.db-journal
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
